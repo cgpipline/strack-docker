@@ -1,4 +1,4 @@
-FROM 7.4.23-fpm-alpine3.14
+FROM php:7.4.23-fpm-alpine3.14
 
 # Add basics first
 RUN apk --no-cache update && apk upgrade && apk --no-cache add \
