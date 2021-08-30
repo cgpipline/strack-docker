@@ -47,7 +47,8 @@ RUN apk add \
 	php7-intl \
 	php7-fileinfo \
 	php7-ldap \
-	php7-apcu
+	php7-apcu \
+	php7-posix
 
 # Problems installing in above stack
 RUN apk add php7-simplexml
@@ -68,6 +69,9 @@ RUN sed -i "s/#LoadModule\ rewrite_module/LoadModule\ rewrite_module/" /etc/apac
 RUN mkdir /app && chown -R apache:apache /app && chmod -R 755 /app && mkdir bootstrap
 ADD start.sh /bootstrap/
 RUN chmod +x /bootstrap/start.sh
+
+RUN cd /app \
+    && php queue start -d
 
 EXPOSE 80
 ENTRYPOINT ["/bootstrap/start.sh"]
