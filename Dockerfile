@@ -117,19 +117,6 @@ cd /home/nginx-php/php-$PHP_VERSION && \
 --without-pear && \
 make && make install && \
 
-
-#  redis
-ADD install/redis-${PHPREDIS_VERSION}.tar.gz ${SRC_DIR}/
-RUN cd ${SRC_DIR}/phpredis-${PHPREDIS_VERSION} \
-    && phpize \
-    && ./configure \
-    && make clean > /dev/null \
-    && make \
-    && make install \
-    && echo "extension=redis.so" > ${PHP_EXTENSION_INI_PATH}/redis.ini \
-    && rm -f ${SRC_DIR}/redis-${PHPREDIS_VERSION}.tar.gz \
-    && rm -rf ${SRC_DIR}/phpredis-${PHPREDIS_VERSION}
-
 #
 # install php-fpm
 cd /home/nginx-php/php-$PHP_VERSION && \
@@ -156,6 +143,18 @@ dnf clean all && \
 rm -rf /tmp/* /var/cache/{yum,ldconfig} /etc/my.cnf{,.d} && \
 mkdir -p --mode=0755 /var/cache/{yum,ldconfig} && \
 find /var/log -type f -delete
+
+#  redis
+ADD install/redis-${PHPREDIS_VERSION}.tar.gz ${SRC_DIR}/
+RUN cd ${SRC_DIR}/phpredis-${PHPREDIS_VERSION} \
+    && phpize \
+    && ./configure \
+    && make clean > /dev/null \
+    && make \
+    && make install \
+    && echo "extension=redis.so" > ${PHP_EXTENSION_INI_PATH}/redis.ini \
+    && rm -f ${SRC_DIR}/redis-${PHPREDIS_VERSION}.tar.gz \
+    && rm -rf ${SRC_DIR}/phpredis-${PHPREDIS_VERSION}
 
 VOLUME ["/data/wwwroot", "/data/wwwlogs", "/data/server/php/ini", "/data/server/php/extension", "/data/server/nginx"]
 
