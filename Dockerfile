@@ -1,150 +1,77 @@
-FROM centos:centos7
+FROM alpine:edge
+MAINTAINER Paul Smith <pa.ulsmith.net>
 
-MAINTAINER weijer
+# Add repos
+RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
 
-ENV SRC_DIR /usr/local
-ENV PHP_VERSION 7.4.23
-ENV PHP_DIR /usr/local/php/${PHP_VERSION}
-ENV PHP_INI_DIR /etc/php/${PHP_VERSION}/cli
-ENV INIT_FILE ${PHP_INI_DIR}/conf.d
-ENV PHPREDIS_VERSION 5.3.4
-ENV HTTPD_PREFIX /app
+# Add basics first
+RUN apk update && apk upgrade && apk add \
+	bash apache2 php7-apache2 curl ca-certificates openssl openssh git php7 php7-phar php7-json php7-iconv php7-openssl tzdata openntpd nano
 
-#set ldconf
-RUN echo "include /etc/ld.so.conf.d/*.conf" > /etc/ld.so.conf \
-    && cd /etc/ld.so.conf.d \
-    && echo "/usr/local/lib" > /etc/ld.so.conf.d/libc.conf
+# Add Composer
+RUN curl -sS https://getcomposer.org/installer | php && mv composer.phar /usr/local/bin/composer
 
-# tools
-RUN yum -y update
+# Setup apache and php
+RUN apk add \
+	php7-ftp \
+	php7-xdebug \
+	php7-mcrypt \
+	php7-mbstring \
+	php7-soap \
+	php7-gmp \
+	php7-pdo_odbc \
+	php7-dom \
+	php7-pdo \
+	php7-zip \
+	php7-mysqli \
+	php7-sqlite3 \
+	php7-pdo_pgsql \
+	php7-bcmath \
+	php7-gd \
+	php7-odbc \
+	php7-pdo_mysql \
+	php7-pdo_sqlite \
+	php7-gettext \
+	php7-xml \
+	php7-xmlreader \
+	php7-xmlwriter \
+	php7-tokenizer \
+	php7-xmlrpc \
+	php7-bz2 \
+	php7-pdo_dblib \
+	php7-curl \
+	php7-ctype \
+	php7-session \
+	php7-redis \
+	php7-exif \
+	php7-intl \
+	php7-fileinfo \
+	php7-ldap \
+	php7-apcu \
+	php7-posix
 
-RUN yum -y install \
-        wget \
-        gcc \
-        make \
-        autoconf \
-        epel-release \
-        libxml2 \
-        libxml2-devel \
-        libjpeg-turbo \
-        libjpeg-turbo-devel \
-        libpng \
-        libpng-devel \
-        openssl \
-        openssl-devel \
-        curl \
-        curl-devel \
-        pcre \
-        pcre-devel \
-        libxslt \
-        libxslt-devel \
-        freetype-devel \
-        bzip2 \
-        bzip2-devel \
-        libedit \
-        libedit-devel \
-        glibc-headers \
-        gcc-c++ \
-        openldap \
-        openldap-devel \
-        supervisor \
-    && cp -frp /usr/lib64/libldap* /usr/lib/  \
-    && rm -rf /var/cache/{yum,ldconfig}/* \
-    && rm -rf /etc/ld.so.cache \
-    && yum clean all
+# Problems installing in above stack
+RUN apk add php7-simplexml
 
-RUN cd ${SRC_DIR}\
-  && wget http://mirror.centos.org/centos/7/os/x86_64/Packages/libevent-devel-2.0.21-4.el7.x86_64.rpm \
-  && yum install libevent-devel-2.0.21-4.el7.x86_64.rpm -y \
-  && rm -rf ${SRC_DIR}/libevent-devel-2.0.21-4.el7.x86_64.rpm \
-  && yum clean all
+RUN cp /usr/bin/php7 /usr/bin/php \
+    && rm -f /var/cache/apk/*
 
-# 配置Apache
-ADD install-httpd.sh /
-RUN chmod +x /install-httpd.sh
-RUN sed -i 's/\r//' /install-httpd.sh
-RUN bash -c "/install-httpd.sh"
-ADD config/httpd/ /usr/local/apache2/conf
-RUN ln -sf /dev/stdout /usr/local/apache2/logs/access_log
-RUN ln -sf /dev/stdout /usr/local/apache2/logs/error_log
+# Add apache to run and configure
+RUN sed -i "s/#LoadModule\ rewrite_module/LoadModule\ rewrite_module/" /etc/apache2/httpd.conf \
+    && sed -i "s/#LoadModule\ session_module/LoadModule\ session_module/" /etc/apache2/httpd.conf \
+    && sed -i "s/#LoadModule\ session_cookie_module/LoadModule\ session_cookie_module/" /etc/apache2/httpd.conf \
+    && sed -i "s/#LoadModule\ session_crypto_module/LoadModule\ session_crypto_module/" /etc/apache2/httpd.conf \
+    && sed -i "s/#LoadModule\ deflate_module/LoadModule\ deflate_module/" /etc/apache2/httpd.conf \
+    && sed -i "s#^DocumentRoot \".*#DocumentRoot \"/app\"#g" /etc/apache2/httpd.conf \
+    && sed -i "s#/var/www/localhost/htdocs#/app#" /etc/apache2/httpd.conf \
+    && printf "\n<Directory \"/app\">\n\tAllowOverride All\n</Directory>\n" >> /etc/apache2/httpd.conf
 
-# 安装php
-ADD install/php-${PHP_VERSION}.tar.gz ${SRC_DIR}/
-RUN cd ${SRC_DIR}/php-${PHP_VERSION} \
-    && ln -s /usr/lib64/libssl.so /usr/lib \
-    && ./configure --prefix=${PHP_DIR} \
-        --with-config-file-path=${PHP_INI_DIR} \
-       	--with-config-file-scan-dir="${PHP_INI_DIR}/conf.d" \
-       --disable-cgi \
-       --enable-fpm \
-       --enable-bcmath \
-       --enable-mbstring \
-       --enable-mysqlnd \
-       --enable-opcache \
-       --enable-pcntl \
-       --enable-fileinfo \
-       --enable-xml \
-       --enable-zip \
-       --enable-intl \
-       --enable-sockets \
-       --enable-gd \
-       --with-curl \
-       --with-png-dir \
-       --with-jpeg-dir \
-       --with-gettext \
-       --with-freetype-dir \
-       --with-libedit \
-       --with-openssl \
-       --with-zlib \
-       --with-curl \
-       --with-mysqli \
-       --with-pdo-mysql \
-       --with-pear \
-       --with-zlib \
-       --with-ldap \
-       --with-jpeg-dir=/usr \
-    && sed -i '/^EXTRA_LIBS/ s/$/ -llber/' Makefile \
-    && make clean > /dev/null \
-    && make \
-    && make install \
-    && ln -s ${PHP_DIR}/bin/php /usr/local/bin/ \
-    && ln -s ${PHP_DIR}/bin/phpize /usr/local/bin/ \
-    && ln -s ${PHP_DIR}/bin/pecl /usr/local/bin/ \
-    && ln -s ${PHP_DIR}/bin/php-config /usr/local/bin/ \
-    && mkdir -p ${PHP_INI_DIR}/conf.d \
-    && cp ${SRC_DIR}/php-${PHP_VERSION}/php.ini-production ${PHP_INI_DIR}/php.ini \
-    && echo -e "opcache.enable=1\nopcache.enable_cli=1\nzend_extension=opcache.so" > ${PHP_INI_DIR}/conf.d/10-opcache.ini \
-    && rm -f ${SRC_DIR}/php-${PHP_VERSION}.tar.gz \
-    && rm -rf ${SRC_DIR}/php-${PHP_VERSION}
+RUN mkdir /app && chown -R apache:apache /app && chmod -R 755 /app && mkdir bootstrap
+ADD start.sh /bootstrap/
+RUN chmod +x /bootstrap/start.sh
 
-# php-fpm配置文件
-COPY config/php-fpm/php-fpm-7.2.conf /usr/local/php/${PHP_VERSION}/etc/php-fpm.conf
-
-#  redis && event
-RUN pecl install -o -f redis \
-    && pecl install -o -f event \
-    && docker-php-ext-enable redis \
-    && echo -e "extension=event.so" > ${PHP_INI_DIR}/conf.d/z-event.ini \
-    && pecl clear-cache
-
-# composer
-RUN curl -sS https://getcomposer.org/installer | php \
-    && mv composer.phar /usr/local/bin/composer
-
-COPY ./config/* ${INIT_FILE}/
-
-# ADD Source
-ADD app/ /app
-
-# Working dir
-WORKDIR $HTTPD_PREFIX
-
-# Run
-COPY supervisord.conf /etc/supervisor/supervisord.conf
-
-# Run queue worker progress
 RUN cd /app \
-    && php queue.php start -d
+    && php queue start -d
 
-CMD ["/usr/bin/supervisord"]
 EXPOSE 80
+ENTRYPOINT ["/bootstrap/start.sh"]
