@@ -1,180 +1,34 @@
-## FROM centos:8
-FROM rockylinux/rockylinux:8
-LABEL maintainer="Skiy Chan <dev@skiy.net>"
+FROM alpine:latest
 
-ENV NGINX_VERSION 1.21.1
-ENV PHP_VERSION 7.4.23
-ENV PHPREDIS_VERSION 5.3.4
+# Install packages
+RUN apk --no-cache update && apk --no-cache add curl libevent-dev php7 php7-fpm \
+    php7-mysqli php7-pdo php7-pdo_mysql  php7-json php7-bcmath php7-sockets php7-opcache php7-openssl php7-curl php7-zlib php7-xml \
+	php7-phar php7-intl php7-dom php7-xmlreader php7-ctype php7-session  php7-ldap \
+	php7-mbstring php7-gd php7-redis nginx supervisor
 
-ENV SRC_DIR /usr/local
-ENV PRO_SERVER_PATH=/data/server
-ENV NGX_WWW_ROOT=/data/wwwroot
-ENV NGX_LOG_ROOT=/data/wwwlogs
-ENV PHP_EXTENSION_SH_PATH=/data/server/php/extension
-ENV PHP_EXTENSION_INI_PATH=/data/server/php/ini
+# Add Composer
+RUN curl -sS https://getcomposer.org/installer | php && mv composer.phar /usr/local/bin/composer
 
-## mkdir folders
-RUN mkdir -p /data/{wwwroot,wwwlogs,server/php/ini,server/php/extension,}
+# Configure nginx
+COPY config/nginx.conf /etc/nginx/nginx.conf
 
-RUN dnf install -y epel-release && \
-#
-## install libraries
-set -x && \
-dnf install -y gcc \
-gcc-c++ \
-autoconf \
-automake \
-libtool \
-make \
-cmake \
-#
-# install PHP libraries
-zlib \
-zlib-devel \
-openssl \
-openssl-devel \
-pcre-devel \
-sqlite-devel \
-libxml2 \
-libxml2-devel \
-libcurl-devel \
-libpng-devel \
-libjpeg-devel \
-freetype-devel \
-libmcrypt-devel \
-#oniguruma \
-openssh-server && \
-#
-# make temp folder
-mkdir -p /home/nginx-php && cd $_ && \
-#
-# install nginx
-curl -Lk https://nginx.org/download/nginx-$NGINX_VERSION.tar.gz | gunzip | tar x -C /home/nginx-php && \
-# curl -Lk http://172.17.0.1/nginx-$NGINX_VERSION.tar.gz | gunzip | tar x -C /home/nginx-php && \
-cd /home/nginx-php/nginx-$NGINX_VERSION && \
-./configure --prefix=/usr/local/nginx \
---user=www --group=www \
---error-log-path=${NGX_LOG_ROOT}/nginx_error.log \
---http-log-path=${NGX_LOG_ROOT}/nginx_access.log \
---pid-path=/var/run/nginx.pid \
---with-pcre \
---with-http_ssl_module \
---with-http_v2_module \
---without-mail_pop3_module \
---without-mail_imap_module \
---with-http_gzip_static_module && \
-make && make install && \
-# add user
-useradd -r -s /sbin/nologin -d ${NGX_WWW_ROOT} -m -k no www && \
-# ln nginx
-ln -s /usr/local/nginx/conf ${PRO_SERVER_PATH}/nginx && \
-#
-# install oniguruma php ext
-curl -Lk https://github.com/kkos/oniguruma/releases/download/v6.9.5_rev1/onig-6.9.5-rev1.tar.gz | gunzip | tar x -C /home/nginx-php && \
-# curl -Lk http://172.17.0.1/onig-6.9.5-rev1.tar.gz | gunzip | tar x -C /home/nginx-php && \
-cd /home/nginx-php/onig-6.9.5 && \
-./configure --prefix=/usr && \
-make && make install && \
-#
-# install php
-curl -Lk https://php.net/distributions/php-$PHP_VERSION.tar.gz | gunzip | tar x -C /home/nginx-php && \
-# curl -Lk http://172.17.0.1/php-$PHP_VERSION.tar.gz | gunzip | tar x -C /home/nginx-php && \
-cd /home/nginx-php/php-$PHP_VERSION && \
-./configure --prefix=/usr/local/php \
---with-config-file-path=/usr/local/php/etc \
---with-config-file-scan-dir=${PHP_EXTENSION_INI_PATH} \
---with-fpm-user=www \
---with-fpm-group=www \
---with-mysqli \
---with-pdo-mysql \
---with-openssl \
---with-iconv \
---with-zlib \
---with-gettext \
---with-curl \
---with-xmlrpc \
---with-mhash \
---enable-fpm \
---enable-xml \
---enable-shmop \
---enable-sysvsem \
---enable-inline-optimization \
---enable-mbregex \
---enable-mbstring \
---enable-ftp \
---enable-mysqlnd \
---enable-pcntl \
---enable-sockets \
---enable-soap \
---enable-session \
---enable-opcache \
---enable-bcmath \
---enable-exif \
---enable-fileinfo \
---disable-rpath \
---enable-ipv6 \
---disable-debug \
---without-pear && \
-make && make install && \
+# Configure PHP-FPM
+COPY config/fpm-pool.conf /etc/php7/php-fpm.d/zzz_custom.conf
+COPY config/php.ini /etc/php7/conf.d/zzz_custom.ini
 
+# install event
+RUN pecl install -o -f event \
+    && echo extension=event.so >> /etc/php7/conf.d/zzz_custom.ini \
+    && pecl clear-cache
 
-#  redis
-ADD install/redis-${PHPREDIS_VERSION}.tar.gz ${SRC_DIR}/
-RUN cd ${SRC_DIR}/phpredis-${PHPREDIS_VERSION} \
-    && phpize \
-    && ./configure \
-    && make clean > /dev/null \
-    && make \
-    && make install \
-    && echo "extension=redis.so" > ${PHP_EXTENSION_INI_PATH}/redis.ini \
-    && rm -f ${SRC_DIR}/redis-${PHPREDIS_VERSION}.tar.gz \
-    && rm -rf ${SRC_DIR}/phpredis-${PHPREDIS_VERSION}
+RUN php -m
 
-#
-# install php-fpm
-cd /home/nginx-php/php-$PHP_VERSION && \
-cp php.ini-production /usr/local/php/etc/php.ini && \
-cp /usr/local/php/etc/php-fpm.conf.default /usr/local/php/etc/php-fpm.conf && \
-cp /usr/local/php/etc/php-fpm.d/www.conf.default /usr/local/php/etc/php-fpm.d/www.conf && \
-# php command support
-ln -s /usr/local/php/bin/* /bin/ && \
-#
-# remove temp folder
-rm -rf /home/nginx-php && \
-#
-# clean os
-dnf remove -y gcc \
-gcc-c++ \
-autoconf \
-automake \
-libtool \
-make \
-cmake && \
-dnf clean all && \
-# dnf remove epel-release -y && \
-# remove cache
-rm -rf /tmp/* /var/cache/{yum,ldconfig} /etc/my.cnf{,.d} && \
-mkdir -p --mode=0755 /var/cache/{yum,ldconfig} && \
-find /var/log -type f -delete
+# Configure supervisord
+COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-VOLUME ["/data/wwwroot", "/data/wwwlogs", "/data/server/php/ini", "/data/server/php/extension", "/data/server/nginx"]
+# Add application
+RUN mkdir -p /var/www
+WORKDIR /var/www
 
-# NGINX
-ADD nginx.conf /usr/local/nginx/conf/
-ADD vhost /usr/local/nginx/conf/vhost
-ADD www ${NGX_WWW_ROOT}
-
-# Start
-ADD entrypoint.sh /
-
-RUN chown -R www:www ${NGX_WWW_ROOT} && \
-chmod +x /entrypoint.sh
-
-# Set port
-EXPOSE 80 443
-
-# CMD ["/usr/local/php/sbin/php-fpm", "-F", "daemon off;"]
-# CMD ["/usr/local/nginx/sbin/nginx", "-g", "daemon off;"]
-
-# Start it
-ENTRYPOINT ["/entrypoint.sh"]
+EXPOSE 80
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
