@@ -1,183 +1,73 @@
-## FROM centos:8
-FROM rockylinux/rockylinux:8
-LABEL maintainer="Skiy Chan <dev@skiy.net>"
+FROM alpine:edge
+MAINTAINER Paul Smith <pa.ulsmith.net>
 
-ENV NGINX_VERSION 1.21.1
-ENV PHP_VERSION 7.4.23
-ENV PHPREDIS_VERSION 5.3.4
+# Add repos
+RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
 
-ENV SRC_DIR /usr/local
-ENV PRO_SERVER_PATH=/data/server
-ENV NGX_WWW_ROOT=/data/wwwroot
-ENV NGX_LOG_ROOT=/data/wwwlogs
-ENV PHP_EXTENSION_SH_PATH=/data/server/php/extension
-ENV PHP_EXTENSION_INI_PATH=/data/server/php/ini
+# Add basics first
+RUN apk update && apk upgrade && apk add \
+	bash apache2 php7-apache2 curl ca-certificates openssl openssh git php7 php7-phar php7-json php7-iconv php7-openssl tzdata openntpd nano
 
-## mkdir folders
-RUN mkdir -p /data/{wwwroot,wwwlogs,server/php/ini,server/php/extension,}
+# Add Composer
+RUN curl -sS https://getcomposer.org/installer | php && mv composer.phar /usr/local/bin/composer
 
-#  redis
-ADD install/redis-${PHPREDIS_VERSION}.tar.gz ${SRC_DIR}/
+# Setup apache and php
+RUN apk add \
+	php7-ftp \
+	php7-xdebug \
+	php7-mcrypt \
+	php7-mbstring \
+	php7-soap \
+	php7-gmp \
+	php7-pdo_odbc \
+	php7-dom \
+	php7-pdo \
+	php7-zip \
+	php7-mysqli \
+	php7-sqlite3 \
+	php7-pdo_pgsql \
+	php7-bcmath \
+	php7-gd \
+	php7-odbc \
+	php7-pdo_mysql \
+	php7-pdo_sqlite \
+	php7-gettext \
+	php7-xml \
+	php7-xmlreader \
+	php7-xmlwriter \
+	php7-tokenizer \
+	php7-xmlrpc \
+	php7-bz2 \
+	php7-pdo_dblib \
+	php7-curl \
+	php7-ctype \
+	php7-session \
+	php7-redis \
+	php7-exif \
+	php7-intl \
+	php7-fileinfo \
+	php7-ldap \
+	php7-apcu
 
-RUN dnf install -y epel-release && \
-#
-## install libraries
-set -x && \
-dnf install -y gcc \
-gcc-c++ \
-autoconf \
-automake \
-libtool \
-make \
-cmake \
-#
-# install PHP libraries
-zlib \
-zlib-devel \
-openssl \
-openssl-devel \
-pcre-devel \
-sqlite-devel \
-libxml2 \
-libxml2-devel \
-libcurl-devel \
-libpng-devel \
-libjpeg-devel \
-freetype-devel \
-libmcrypt-devel \
-#oniguruma \
-openssh-server && \
-#
-# make temp folder
-mkdir -p /home/nginx-php && cd $_ && \
-#
-# install nginx
-curl -Lk https://nginx.org/download/nginx-$NGINX_VERSION.tar.gz | gunzip | tar x -C /home/nginx-php && \
-# curl -Lk http://172.17.0.1/nginx-$NGINX_VERSION.tar.gz | gunzip | tar x -C /home/nginx-php && \
-cd /home/nginx-php/nginx-$NGINX_VERSION && \
-./configure --prefix=/usr/local/nginx \
---user=www --group=www \
---error-log-path=${NGX_LOG_ROOT}/nginx_error.log \
---http-log-path=${NGX_LOG_ROOT}/nginx_access.log \
---pid-path=/var/run/nginx.pid \
---with-pcre \
---with-http_ssl_module \
---with-http_v2_module \
---without-mail_pop3_module \
---without-mail_imap_module \
---with-http_gzip_static_module && \
-make && make install && \
-# add user
-useradd -r -s /sbin/nologin -d ${NGX_WWW_ROOT} -m -k no www && \
-# ln nginx
-ln -s /usr/local/nginx/conf ${PRO_SERVER_PATH}/nginx && \
-#
-# install oniguruma php ext
-curl -Lk https://github.com/kkos/oniguruma/releases/download/v6.9.5_rev1/onig-6.9.5-rev1.tar.gz | gunzip | tar x -C /home/nginx-php && \
-# curl -Lk http://172.17.0.1/onig-6.9.5-rev1.tar.gz | gunzip | tar x -C /home/nginx-php && \
-cd /home/nginx-php/onig-6.9.5 && \
-./configure --prefix=/usr && \
-make && make install && \
-#
-# install php
-curl -Lk https://php.net/distributions/php-$PHP_VERSION.tar.gz | gunzip | tar x -C /home/nginx-php && \
-# curl -Lk http://172.17.0.1/php-$PHP_VERSION.tar.gz | gunzip | tar x -C /home/nginx-php && \
-cd /home/nginx-php/php-$PHP_VERSION && \
-./configure --prefix=/usr/local/php \
---with-config-file-path=/usr/local/php/etc \
---with-config-file-scan-dir=${PHP_EXTENSION_INI_PATH} \
---with-fpm-user=www \
---with-fpm-group=www \
---with-mysqli \
---with-pdo-mysql \
---with-openssl \
---with-iconv \
---with-zlib \
---with-gettext \
---with-curl \
---with-xmlrpc \
---with-mhash \
---enable-fpm \
---enable-xml \
---enable-shmop \
---enable-sysvsem \
---enable-inline-optimization \
---enable-mbregex \
---enable-mbstring \
---enable-ftp \
---enable-mysqlnd \
---enable-pcntl \
---enable-sockets \
---enable-soap \
---enable-session \
---enable-opcache \
---enable-bcmath \
---enable-exif \
---enable-fileinfo \
---disable-rpath \
---enable-ipv6 \
---disable-debug \
---without-pear && \
-make && make install && \
+# Problems installing in above stack
+RUN apk add php7-simplexml
 
-#
-# install php-redis
-cd ${SRC_DIR}/phpredis-${PHPREDIS_VERSION} \
-&& phpize \
-&& ./configure \
-&& make clean > /dev/null \
-&& make \
-&& make install \
-&& echo "extension=redis.so" > ${PHP_EXTENSION_INI_PATH}/redis.ini \
-&& rm -f ${SRC_DIR}/redis-${PHPREDIS_VERSION}.tar.gz \
-&& rm -rf ${SRC_DIR}/phpredis-${PHPREDIS_VERSION}  && \
+RUN cp /usr/bin/php7 /usr/bin/php \
+    && rm -f /var/cache/apk/*
 
-#
-# install php-fpm
-cd /home/nginx-php/php-$PHP_VERSION && \
-cp php.ini-production /usr/local/php/etc/php.ini && \
-cp /usr/local/php/etc/php-fpm.conf.default /usr/local/php/etc/php-fpm.conf && \
-cp /usr/local/php/etc/php-fpm.d/www.conf.default /usr/local/php/etc/php-fpm.d/www.conf && \
-# php command support
-ln -s /usr/local/php/bin/* /bin/ && \
-#
-# remove temp folder
-rm -rf /home/nginx-php && \
-#
-# clean os
-dnf remove -y gcc \
-gcc-c++ \
-autoconf \
-automake \
-libtool \
-make \
-cmake && \
-dnf clean all && \
-# dnf remove epel-release -y && \
-# remove cache
-rm -rf /tmp/* /var/cache/{yum,ldconfig} /etc/my.cnf{,.d} && \
-mkdir -p --mode=0755 /var/cache/{yum,ldconfig} && \
-find /var/log -type f -delete
+# Add apache to run and configure
+RUN sed -i "s/#LoadModule\ rewrite_module/LoadModule\ rewrite_module/" /etc/apache2/httpd.conf \
+    && sed -i "s/#LoadModule\ session_module/LoadModule\ session_module/" /etc/apache2/httpd.conf \
+    && sed -i "s/#LoadModule\ session_cookie_module/LoadModule\ session_cookie_module/" /etc/apache2/httpd.conf \
+    && sed -i "s/#LoadModule\ session_crypto_module/LoadModule\ session_crypto_module/" /etc/apache2/httpd.conf \
+    && sed -i "s/#LoadModule\ deflate_module/LoadModule\ deflate_module/" /etc/apache2/httpd.conf \
+    && sed -i "s#^DocumentRoot \".*#DocumentRoot \"/app\"#g" /etc/apache2/httpd.conf \
+    && sed -i "s#/var/www/localhost/htdocs#/app#" /etc/apache2/httpd.conf \
+    && printf "\n<Directory \"/app\">\n\tAllowOverride All\n</Directory>\n" >> /etc/apache2/httpd.conf
 
+RUN mkdir /app && chown -R apache:apache /app && chmod -R 755 /app && mkdir bootstrap
+ADD start.sh /bootstrap/
+RUN chmod +x /bootstrap/start.sh
 
-VOLUME ["/data/wwwroot", "/data/wwwlogs", "/data/server/php/ini", "/data/server/php/extension", "/data/server/nginx"]
-
-# NGINX
-ADD nginx.conf /usr/local/nginx/conf/
-ADD vhost /usr/local/nginx/conf/vhost
-ADD www ${NGX_WWW_ROOT}
-
-# Start
-ADD entrypoint.sh /
-
-RUN chown -R www:www ${NGX_WWW_ROOT} && \
-chmod +x /entrypoint.sh
-
-# Set port
-EXPOSE 80 443
-
-# CMD ["/usr/local/php/sbin/php-fpm", "-F", "daemon off;"]
-# CMD ["/usr/local/nginx/sbin/nginx", "-g", "daemon off;"]
-
-# Start it
-ENTRYPOINT ["/entrypoint.sh"]
+EXPOSE 80
+ENTRYPOINT ["/bootstrap/start.sh"]
