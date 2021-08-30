@@ -8,7 +8,7 @@ ENV PHP_DIR /usr/local/php/${PHP_VERSION}
 ENV PHP_INI_DIR /etc/php/${PHP_VERSION}/cli
 ENV INIT_FILE ${PHP_INI_DIR}/conf.d
 ENV PHPREDIS_VERSION 5.3.4
-ENV HTTPD_PREFIX /usr/local/apache2
+ENV HTTPD_PREFIX /app
 
 #set ldconf
 RUN echo "include /etc/ld.so.conf.d/*.conf" > /etc/ld.so.conf \
@@ -23,6 +23,7 @@ RUN yum -y install \
         gcc \
         make \
         autoconf \
+        epel-release \
         libxml2 \
         libxml2-devel \
         libjpeg-turbo \
@@ -46,14 +47,12 @@ RUN yum -y install \
         gcc-c++ \
         openldap \
         openldap-devel \
-        python-setuptools \
         libevent-dev \
+        supervisor \
     && cp -frp /usr/lib64/libldap* /usr/lib/  \
     && rm -rf /var/cache/{yum,ldconfig}/* \
     && rm -rf /etc/ld.so.cache \
     && yum clean all
-
-RUN easy_install supervisor
 
 # 配置Apache
 ADD install-httpd.sh /
