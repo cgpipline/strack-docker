@@ -1,27 +1,31 @@
-FROM alpine:latest
+FROM 7.4.23-fpm-alpine3.14
 
-# Install packages
-RUN apk --no-cache update && apk --no-cache add curl libevent-dev php7 php7-fpm \
-    php7-mysqli php7-pdo php7-pdo_mysql  php7-json php7-bcmath php7-sockets php7-opcache php7-openssl php7-curl php7-zlib php7-xml \
-	php7-phar php7-intl php7-dom php7-xmlreader php7-ctype php7-session  php7-ldap \
-	php7-mbstring php7-gd php7-redis nginx supervisor
+# Add basics first
+RUN apk --no-cache update && apk upgrade && apk --no-cache add \
+	bash curl ca-certificates openssl openssh git nano libxml2-dev tzdata icu-dev openntpd libedit-dev libzip-dev libjpeg-turbo-dev libpng-dev freetype-dev \
+	    autoconf dpkg-dev dpkg file g++ gcc libc-dev make pkgconf re2c pcre-dev openssl-dev libffi-dev libressl-dev libevent-dev zlib-dev libtool automake \
+        nginx supervisor
 
-# Add Composer
-RUN curl -sS https://getcomposer.org/installer | php && mv composer.phar /usr/local/bin/composer
+RUN docker-php-ext-install soap zip pcntl sockets intl exif opcache pdo_mysql mysqli bcmath calendar gd ldap
+
+
+# Configure PHP
+COPY config/php.ini /usr/local/etc/php/conf.d/zzz_custom.ini
 
 # Configure nginx
 COPY config/nginx.conf /etc/nginx/nginx.conf
 
 # Configure PHP-FPM
-COPY config/fpm-pool.conf /etc/php7/php-fpm.d/zzz_custom.conf
-COPY config/php.ini /etc/php7/conf.d/zzz_custom.ini
+COPY config/fpm-pool.conf /usr/local/etc/php/conf.d/zzz_custom.conf
+COPY config/php.ini /usr/local/etc/php/conf.d/zzz_custom.ini
 
 # install event
 RUN pecl install -o -f event \
-    && echo extension=event.so >> /etc/php7/conf.d/zzz_custom.ini \
+    && echo extension=event.so >> /usr/local/etc/php/conf.d/docker-php-ext-sockets.ini \
     && pecl clear-cache
 
-RUN php -m
+# Add Composer
+RUN curl -sS https://getcomposer.org/installer | php && mv composer.phar /usr/local/bin/composer
 
 # Configure supervisord
 COPY config/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
