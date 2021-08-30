@@ -47,12 +47,17 @@ RUN yum -y install \
         gcc-c++ \
         openldap \
         openldap-devel \
-        libevent-dev \
         supervisor \
     && cp -frp /usr/lib64/libldap* /usr/lib/  \
     && rm -rf /var/cache/{yum,ldconfig}/* \
     && rm -rf /etc/ld.so.cache \
     && yum clean all
+
+RUN cd ${SRC_DIR}\
+  && wget http://mirror.centos.org/centos/7/os/x86_64/Packages/libevent-devel-2.0.21-4.el7.x86_64.rpm \
+  && yum install libevent-devel-2.0.21-4.el7.x86_64.rpm -y \
+  && rm -rf ${SRC_DIR}/libevent-devel-2.0.21-4.el7.x86_64.rpm \
+  && yum clean all
 
 # 配置Apache
 ADD install-httpd.sh /
