@@ -16,6 +16,9 @@ ENV PHP_EXTENSION_INI_PATH=/data/server/php/ini
 ## mkdir folders
 RUN mkdir -p /data/{wwwroot,wwwlogs,server/php/ini,server/php/extension,}
 
+#  redis
+ADD install/redis-${PHPREDIS_VERSION}.tar.gz ${SRC_DIR}/
+
 RUN dnf install -y epel-release && \
 #
 ## install libraries
@@ -118,6 +121,18 @@ cd /home/nginx-php/php-$PHP_VERSION && \
 make && make install && \
 
 #
+# install php-redis
+cd ${SRC_DIR}/phpredis-${PHPREDIS_VERSION} \
+&& phpize \
+&& ./configure \
+&& make clean > /dev/null \
+&& make \
+&& make install \
+&& echo "extension=redis.so" > ${PHP_EXTENSION_INI_PATH}/redis.ini \
+&& rm -f ${SRC_DIR}/redis-${PHPREDIS_VERSION}.tar.gz \
+&& rm -rf ${SRC_DIR}/phpredis-${PHPREDIS_VERSION}  && \
+
+#
 # install php-fpm
 cd /home/nginx-php/php-$PHP_VERSION && \
 cp php.ini-production /usr/local/php/etc/php.ini && \
@@ -144,17 +159,6 @@ rm -rf /tmp/* /var/cache/{yum,ldconfig} /etc/my.cnf{,.d} && \
 mkdir -p --mode=0755 /var/cache/{yum,ldconfig} && \
 find /var/log -type f -delete
 
-#  redis
-ADD install/redis-${PHPREDIS_VERSION}.tar.gz ${SRC_DIR}/
-RUN cd ${SRC_DIR}/phpredis-${PHPREDIS_VERSION} \
-    && phpize \
-    && ./configure \
-    && make clean > /dev/null \
-    && make \
-    && make install \
-    && echo "extension=redis.so" > ${PHP_EXTENSION_INI_PATH}/redis.ini \
-    && rm -f ${SRC_DIR}/redis-${PHPREDIS_VERSION}.tar.gz \
-    && rm -rf ${SRC_DIR}/phpredis-${PHPREDIS_VERSION}
 
 VOLUME ["/data/wwwroot", "/data/wwwlogs", "/data/server/php/ini", "/data/server/php/extension", "/data/server/nginx"]
 
