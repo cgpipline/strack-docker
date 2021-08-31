@@ -19,7 +19,9 @@ COPY config/fpm-pool.conf /usr/local/etc/php/conf.d/zzz_custom.conf
 COPY config/php.ini /usr/local/etc/php/conf.d/zzz_custom.ini
 
 # install event
-RUN pecl install -o -f event \
+RUN pecl install -o -f redis \
+    && pecl install -o -f event \
+    && docker-php-ext-enable redis \
     && echo extension=event.so >> /usr/local/etc/php/conf.d/docker-php-ext-sockets.ini \
     && pecl clear-cache
 
