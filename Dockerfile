@@ -4,9 +4,9 @@ FROM php:7.4.23-fpm-alpine3.14
 RUN apk --no-cache update && apk upgrade && apk --no-cache add \
 	bash curl ca-certificates openssl openssh git nano libxml2-dev tzdata icu-dev openntpd libedit-dev libzip-dev libjpeg-turbo-dev libpng-dev freetype-dev \
 	    autoconf dpkg-dev dpkg file g++ gcc libc-dev make pkgconf re2c pcre-dev openssl-dev libffi-dev libressl-dev libevent-dev zlib-dev libtool automake \
-        nginx supervisor
+        nginx supervisor ldb-dev libldap openldap-dev
 
-RUN docker-php-ext-install soap zip pcntl sockets intl exif opcache pdo_mysql mysqli bcmath calendar gd
+RUN docker-php-ext-install soap zip pcntl sockets intl exif opcache pdo_mysql mysqli bcmath calendar gd ldap
 
 # Configure PHP
 COPY config/php.ini /usr/local/etc/php/conf.d/zzz_custom.ini
